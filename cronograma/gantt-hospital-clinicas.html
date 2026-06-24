@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagrama de Gantt - Hospital de Clínicas DTI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f1f5f9; color: #1e293b; min-height: 100vh; padding: 32px 24px;
+    }
+    .container { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+    .page-header { display: flex; flex-direction: column; gap: 6px; }
+    .page-header h1 { font-size: 28px; font-weight: 800; display: flex; align-items: center; gap: 10px; color: #0f172a; }
+    .page-header p { color: #64748b; font-size: 15px; }
+    .icon-cal { width: 28px; height: 28px; background: #2563eb; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .icon-cal svg { stroke: #fff; }
+
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 24px; }
+    .info-grid .label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing:.06em; margin-bottom: 4px; }
+    .info-grid .value { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+
+    .leg-title { font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+    .leg-group { margin-bottom: 12px; }
+    .leg-group-label { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing:.07em; margin-bottom: 6px; }
+    .leg-items { display: flex; flex-wrap: wrap; gap: 12px; }
+    .leg-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+    .swatch { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+    .sdot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+
+    .tabs { display: flex; gap: 4px; background: #f1f5f9; border-radius: 10px; padding: 4px; }
+    .tab-btn { flex: 1; padding: 8px 12px; font-size: 13px; font-weight: 600; border: none; background: transparent; border-radius: 7px; cursor: pointer; color: #64748b; transition: all .15s; }
+    .tab-btn.active { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+    .tab-btn:hover:not(.active) { background: #e2e8f0; color: #334155; }
+
+    .gantt-wrapper { overflow-x: auto; }
+    .gantt-inner { min-width: max-content; }
+    .gantt-header { display: flex; margin-bottom: 8px; }
+    .label-col { width: 320px; flex-shrink: 0; }
+    .week-cell { text-align: center; font-size: 11px; font-weight: 600; color: #94a3b8; border-left: 1px solid #e2e8f0; padding: 4px 0; }
+
+    .gantt-body { display: flex; flex-direction: column; gap: 3px; }
+    .gantt-row { display: flex; align-items: center; border-radius: 8px; padding: 6px 8px; transition: background .12s; }
+    .gantt-row:hover { background: #f8fafc; }
+
+    .task-info { width: 320px; flex-shrink: 0; display: flex; align-items: flex-start; gap: 8px; padding-right: 16px; }
+
+    /* ── Status dot: clickeable ── */
+    .status-dot {
+      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+      cursor: pointer; transition: transform .15s, box-shadow .15s;
+      position: relative;
+    }
+    .status-dot:hover { transform: scale(1.4); }
+    .status-dot.completed   { background: #16a34a; }
+    .status-dot.in-progress { background: #2563eb; box-shadow: 0 0 0 3px #dbeafe; }
+    .status-dot.pending     { background: #cbd5e1; border: 2px solid #94a3b8; }
+
+    /* tooltip */
+    #tooltip {
+      position: fixed; background: #1e293b; color: #fff;
+      font-size: 11px; padding: 4px 10px; border-radius: 6px;
+      pointer-events: none; opacity: 0; transition: opacity .12s;
+      z-index: 9999; white-space: nowrap;
+    }
+    #tooltip.show { opacity: 1; }
+
+    .task-text { flex: 1; min-width: 0; }
+    .task-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-badges { display: flex; gap: 4px; margin-top: 3px; flex-wrap: wrap; }
+    .badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 20px; white-space: nowrap; }
+    .badge-outline { border: 1px solid #e2e8f0; color: #475569; background: transparent; }
+
+    .timeline { position: relative; display: flex; }
+    .grid-line { flex-shrink: 0; border-left: 1px solid #f1f5f9; height: 36px; }
+    .grid-line.alt { background: #fafafa; }
+
+    .task-bar {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      height: 24px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
+      opacity: .85; transition: opacity .15s, box-shadow .15s;
+      white-space: nowrap; overflow: hidden; padding: 0 6px;
+    }
+    .gantt-row:hover .task-bar { opacity: 1; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+
+    .cat-planning    { background: #3b82f6; }
+    .cat-design      { background: #a855f7; }
+    .cat-development { background: #22c55e; }
+    .cat-testing     { background: #f97316; }
+    .cat-deployment  { background: #ef4444; }
+
+    .mod-general       { background: #475569; color: #fff; }
+    .mod-documentation { background: #1d4ed8; color: #fff; }
+    .mod-ambulance     { background: #059669; color: #fff; }
+
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 20px; }
+    .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .summary-header h3 { font-size: 16px; font-weight: 700; }
+    .summary-features { list-style: none; color: #64748b; font-size: 13px; line-height: 1.9; margin-bottom: 16px; }
+    .summary-features li::before { content: "• "; color: #94a3b8; }
+    .summary-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; border-top: 1px solid #e2e8f0; padding-top: 14px; text-align: center; }
+    .stat-num { font-size: 26px; font-weight: 800; }
+    .stat-label { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+    .progress-label { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .progress-bar { height: 8px; background: #e2e8f0; border-radius: 99px; overflow: hidden; margin-bottom: 10px; }
+    .progress-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
+    .fill-blue   { background: #3b82f6; }
+    .fill-purple { background: #a855f7; }
+    .fill-green  { background: #22c55e; }
+    .fill-orange { background: #f97316; }
+    .fill-red    { background: #ef4444; }
+
+    /* toast */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px);
+      background: #1e293b; color: #fff; font-size: 13px; padding: 10px 18px;
+      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      transition: transform .25s ease, opacity .25s ease; opacity: 0; z-index: 9999;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    @media (max-width: 600px) {
+      body { padding: 14px 10px; }
+      .label-col, .task-info { width: 180px; }
+    }
+  </style>
+</head>
+<body>
+<div id="tooltip"></div>
+<div id="toast"></div>
+
+<div class="container">
+
+  <div class="page-header">
+    <h1>
+      <span class="icon-cal">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </span>
+      Diagrama de Gantt
+    </h1>
+    <p>Hospital de Clínicas &mdash; Desarrollo de Servicios DTI</p>
+  </div>
+
+  <div class="card">
+    <div class="info-grid">
+      <div><div class="label">Cliente</div><div class="value">Hospital de Clínicas</div></div>
+      <div><div class="label">Ubicación</div><div class="value">Piso 6 &mdash; Servidores DTI</div></div>
+      <div><div class="label">Módulos</div><div class="value">Documentación + Ambulancias</div></div>
+      <div>
+        <div class="label">Duración estimada</div>
+        <div class="value">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          19 semanas
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="leg-title">Referencias</div>
+    <div class="leg-group">
+      <div class="leg-group-label">Fases del Proyecto</div>
+      <div class="leg-items">
+        <div class="leg-item"><span class="swatch" style="background:#3b82f6"></span>Planificación</div>
+        <div class="leg-item"><span class="swatch" style="background:#a855f7"></span>Diseño</div>
+        <div class="leg-item"><span class="swatch" style="background:#22c55e"></span>Desarrollo</div>
+        <div class="leg-item"><span class="swatch" style="background:#f97316"></span>Pruebas</div>
+        <div class="leg-item"><span class="swatch" style="background:#ef4444"></span>Despliegue</div>
+      </div>
+    </div>
+    <div class="leg-group">
+      <div class="leg-group-label">Módulos</div>
+      <div class="leg-items">
+        <div class="leg-item"><span class="swatch" style="background:#475569"></span>General</div>
+        <div class="leg-item"><span class="swatch" style="background:#1d4ed8"></span>Módulo de Documentación</div>
+        <div class="leg-item"><span class="swatch" style="background:#059669"></span>Módulo de Ambulancias</div>
+      </div>
+    </div>
+    <div class="leg-group" style="margin-bottom:0">
+      <div class="leg-group-label">Estado — <em style="font-style:normal;color:#475569">hacé click en el círculo de una tarea para cambiar su estado</em></div>
+      <div class="leg-items">
+        <div class="leg-item"><span class="sdot" style="background:#cbd5e1;border:2px solid #94a3b8"></span>Pendiente</div>
+        <div class="leg-item">→</div>
+        <div class="leg-item"><span class="sdot" style="background:#2563eb;box-shadow:0 0 0 3px #dbeafe"></span>En progreso</div>
+        <div class="leg-item">→</div>
+        <div class="leg-item"><span class="sdot" style="background:#16a34a"></span>Completada</div>
+        <div class="leg-item">→ (vuelve a Pendiente)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab-btn active" onclick="setFilter(this,'all')">Todos</button>
+    <button class="tab-btn"       onclick="setFilter(this,'general')">General</button>
+    <button class="tab-btn"       onclick="setFilter(this,'documentation')">Documentación</button>
+    <button class="tab-btn"       onclick="setFilter(this,'ambulance')">Ambulancias</button>
+  </div>
+
+  <div class="card" style="padding:20px">
+    <div class="gantt-wrapper">
+      <div class="gantt-inner">
+        <div class="gantt-header">
+          <div class="label-col"></div>
+          <div id="weekHeaders" style="display:flex"></div>
+        </div>
+        <div class="gantt-body" id="ganttBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="leg-title" style="margin-bottom:16px">Progreso por Fase</div>
+    <div id="progressBars"></div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="card">
+      <div class="summary-header">
+        <h3>Módulo de Documentación</h3>
+        <span class="badge mod-documentation">QR + Encuestas</span>
+      </div>
+      <ul class="summary-features">
+        <li>Gestión de documentación por categorías</li>
+        <li>Sistema de códigos QR para acceso móvil</li>
+        <li>Módulo de encuestas de satisfacción</li>
+        <li>Panel de análisis e indicadores</li>
+        <li>Portal administrativo para funcionarios</li>
+      </ul>
+      <div class="summary-stats">
+        <div><div class="stat-num" style="color:#2563eb" id="docTotal"></div><div class="stat-label">Tareas totales</div></div>
+        <div><div class="stat-num" style="color:#16a34a" id="docDone"></div><div class="stat-label">Completadas</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="summary-header">
+        <h3>Módulo de Ambulancias</h3>
+        <span class="badge mod-ambulance">Trazabilidad</span>
+      </div>
+      <ul class="summary-features">
+        <li>Gestión de solicitudes de traslado</li>
+        <li>Trazabilidad en tiempo real</li>
+        <li>Integración con API externa (C.I.)</li>
+        <li>Gestión de flota y personal</li>
+        <li>Sistema de rutas nacionales</li>
+      </ul>
+      <div class="summary-stats">
+        <div><div class="stat-num" style="color:#059669" id="ambTotal"></div><div class="stat-label">Tareas totales</div></div>
+        <div><div class="stat-num" style="color:#16a34a" id="ambDone"></div><div class="stat-label">Completadas</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const TOTAL_WEEKS = 20, WEEK_W = 52;
+
+const tasks = [
+  {id:'g1', name:'Análisis de requerimientos inicial',          startWeek:0,  duration:2, category:'planning',    module:'general',       status:'completed'},
+  {id:'g2', name:'Configuración de infraestructura DTI',        startWeek:1,  duration:3, category:'planning',    module:'general',       status:'in-progress'},
+  {id:'d1', name:'Análisis de categorías de documentos',        startWeek:2,  duration:2, category:'planning',    module:'documentation', status:'in-progress'},
+  {id:'d2', name:'Diseño de base de datos - Documentos',        startWeek:3,  duration:2, category:'design',      module:'documentation', status:'pending'},
+  {id:'d3', name:'Diseño UI/UX - Portal administrativo',        startWeek:4,  duration:3, category:'design',      module:'documentation', status:'pending'},
+  {id:'d4', name:'Desarrollo backend - API de documentos',      startWeek:5,  duration:4, category:'development', module:'documentation', status:'pending'},
+  {id:'d5', name:'Desarrollo - Sistema de generación de QR',    startWeek:6,  duration:2, category:'development', module:'documentation', status:'pending'},
+  {id:'d6', name:'Desarrollo frontend - Portal administrativo', startWeek:7,  duration:3, category:'development', module:'documentation', status:'pending'},
+  {id:'d7', name:'Desarrollo - Visor móvil de documentos',      startWeek:8,  duration:3, category:'development', module:'documentation', status:'pending'},
+  {id:'d8', name:'Diseño de módulo de encuestas',               startWeek:6,  duration:2, category:'design',      module:'documentation', status:'pending'},
+  {id:'d9', name:'Desarrollo - Módulo de encuestas',            startWeek:8,  duration:4, category:'development', module:'documentation', status:'pending'},
+  {id:'d10',name:'Desarrollo - Panel de análisis de resultados',startWeek:10, duration:3, category:'development', module:'documentation', status:'pending'},
+  {id:'d11',name:'Pruebas integradas - Módulo documentación',   startWeek:12, duration:2, category:'testing',     module:'documentation', status:'pending'},
+  {id:'d12',name:'Migración de documentos existentes',          startWeek:13, duration:2, category:'deployment',  module:'documentation', status:'pending'},
+  {id:'d13',name:'Capacitación personal administrativo',        startWeek:14, duration:1, category:'deployment',  module:'documentation', status:'pending'},
+  {id:'d14',name:'Despliegue en servidores DTI - Docs',         startWeek:14, duration:1, category:'deployment',  module:'documentation', status:'pending'},
+  {id:'a1', name:'Análisis de workflow de solicitudes',         startWeek:2,  duration:2, category:'planning',    module:'ambulance',     status:'in-progress'},
+  {id:'a2', name:'Análisis de rutas y circuitos nacionales',    startWeek:3,  duration:2, category:'planning',    module:'ambulance',     status:'pending'},
+  {id:'a3', name:'Diseño de base de datos - Trazabilidad',      startWeek:4,  duration:2, category:'design',      module:'ambulance',     status:'pending'},
+  {id:'a4', name:'Diseño UI/UX - Sistema de gestión',           startWeek:5,  duration:2, category:'design',      module:'ambulance',     status:'pending'},
+  {id:'a5', name:'Desarrollo - Integración API externa (C.I.)', startWeek:6,  duration:2, category:'development', module:'ambulance',     status:'pending'},
+  {id:'a6', name:'Desarrollo backend - Gestión de solicitudes', startWeek:7,  duration:3, category:'development', module:'ambulance',     status:'pending'},
+  {id:'a7', name:'Desarrollo - Gestión de flota y personal',    startWeek:8,  duration:3, category:'development', module:'ambulance',     status:'pending'},
+  {id:'a8', name:'Desarrollo - Sistema de rutas',               startWeek:9,  duration:4, category:'development', module:'ambulance',     status:'pending'},
+  {id:'a9', name:'Desarrollo frontend - Dashboard principal',   startWeek:10, duration:3, category:'development', module:'ambulance',     status:'pending'},
+  {id:'a10',name:'Desarrollo - Trazabilidad en tiempo real',    startWeek:11, duration:3, category:'development', module:'ambulance',     status:'pending'},
+  {id:'a11',name:'Pruebas integradas - Módulo ambulancias',     startWeek:13, duration:2, category:'testing',     module:'ambulance',     status:'pending'},
+  {id:'a12',name:'Carga de datos iniciales (flota, personal)',  startWeek:14, duration:1, category:'deployment',  module:'ambulance',     status:'pending'},
+  {id:'a13',name:'Capacitación personal operativo',             startWeek:15, duration:1, category:'deployment',  module:'ambulance',     status:'pending'},
+  {id:'a14',name:'Despliegue en servidores DTI - Ambulancias',  startWeek:15, duration:1, category:'deployment',  module:'ambulance',     status:'pending'},
+  {id:'f1', name:'Pruebas de integración global',               startWeek:16, duration:2, category:'testing',     module:'general',       status:'pending'},
+  {id:'f2', name:'Ajustes finales y optimización',              startWeek:17, duration:1, category:'deployment',  module:'general',       status:'pending'},
+  {id:'f3', name:'Puesta en producción',                        startWeek:18, duration:1, category:'deployment',  module:'general',       status:'pending'},
+];
+
+const STATUS_CYCLE  = ['pending', 'in-progress', 'completed'];
+const STATUS_LABELS = {pending:'Pendiente', 'in-progress':'En progreso', completed:'Completada'};
+const catClass = {planning:'cat-planning',design:'cat-design',development:'cat-development',testing:'cat-testing',deployment:'cat-deployment'};
+const catLabel = {planning:'Planificación',design:'Diseño',development:'Desarrollo',testing:'Pruebas',deployment:'Despliegue'};
+const modClass = {general:'mod-general',documentation:'mod-documentation',ambulance:'mod-ambulance'};
+const modLabel = {general:'General',documentation:'Documentación',ambulance:'Ambulancias'};
+
+let currentFilter = 'all';
+
+/* ── Toast ── */
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+/* ── Tooltip ── */
+const tip = document.getElementById('tooltip');
+function showTip(e, text) {
+  tip.textContent = text;
+  tip.classList.add('show');
+  moveTip(e);
+}
+function moveTip(e) {
+  tip.style.left = (e.clientX + 14) + 'px';
+  tip.style.top  = (e.clientY - 28) + 'px';
+}
+function hideTip() { tip.classList.remove('show'); }
+
+/* ── Cycle status ── */
+function cycleStatus(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const idx = STATUS_CYCLE.indexOf(task.status);
+  task.status = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+
+  // Update the dot in the DOM (no full re-render to keep scroll position)
+  const dot = document.querySelector('[data-task-id="' + taskId + '"]');
+  if (dot) {
+    dot.className = 'status-dot ' + task.status;
+    dot.title = 'Estado: ' + STATUS_LABELS[task.status] + ' — click para cambiar';
+  }
+
+  showToast('"' + task.name.slice(0, 30) + (task.name.length > 30 ? '…' : '') + '" → ' + STATUS_LABELS[task.status]);
+  refreshStats();
+}
+
+/* ── Build week headers ── */
+function buildHeaders() {
+  const el = document.getElementById('weekHeaders');
+  for (let i = 0; i < TOTAL_WEEKS; i++) {
+    const d = document.createElement('div');
+    d.className = 'week-cell';
+    d.style.width = WEEK_W + 'px';
+    d.textContent = 'S' + (i + 1);
+    el.appendChild(d);
+  }
+}
+
+/* ── Build rows ── */
+function buildRows(filter) {
+  const body = document.getElementById('ganttBody');
+  body.innerHTML = '';
+  const list = filter === 'all' ? tasks : tasks.filter(t => t.module === filter);
+  list.forEach(task => {
+    const row = document.createElement('div');
+    row.className = 'gantt-row';
+
+    // Task info
+    const info = document.createElement('div');
+    info.className = 'task-info';
+
+    const dot = document.createElement('span');
+    dot.className = 'status-dot ' + (task.status || 'pending');
+    dot.dataset.taskId = task.id;
+    dot.title = 'Estado: ' + STATUS_LABELS[task.status] + ' — click para cambiar';
+    dot.addEventListener('click', () => cycleStatus(task.id));
+    dot.addEventListener('mouseenter', e => showTip(e, 'Click para cambiar estado'));
+    dot.addEventListener('mousemove', moveTip);
+    dot.addEventListener('mouseleave', hideTip);
+    info.appendChild(dot);
+
+    const txt = document.createElement('div');
+    txt.className = 'task-text';
+    const nm = document.createElement('div');
+    nm.className = 'task-name'; nm.title = task.name; nm.textContent = task.name;
+    txt.appendChild(nm);
+
+    const bdgs = document.createElement('div');
+    bdgs.className = 'task-badges';
+    const b1 = document.createElement('span');
+    b1.className = 'badge badge-outline'; b1.textContent = catLabel[task.category];
+    const b2 = document.createElement('span');
+    b2.className = 'badge ' + modClass[task.module]; b2.textContent = modLabel[task.module];
+    bdgs.appendChild(b1); bdgs.appendChild(b2);
+    txt.appendChild(bdgs);
+    info.appendChild(txt);
+    row.appendChild(info);
+
+    // Timeline
+    const tl = document.createElement('div');
+    tl.className = 'timeline';
+    tl.style.width = (TOTAL_WEEKS * WEEK_W) + 'px';
+    for (let i = 0; i < TOTAL_WEEKS; i++) {
+      const gl = document.createElement('div');
+      gl.className = 'grid-line' + (i % 2 ? ' alt' : '');
+      gl.style.width = WEEK_W + 'px';
+      tl.appendChild(gl);
+    }
+    const bar = document.createElement('div');
+    bar.className = 'task-bar ' + catClass[task.category];
+    bar.style.left  = (task.startWeek * WEEK_W) + 'px';
+    bar.style.width = (task.duration * WEEK_W - 6) + 'px';
+    bar.textContent = task.duration + ' sem';
+    tl.appendChild(bar);
+    row.appendChild(tl);
+    body.appendChild(row);
+  });
+}
+
+/* ── Progress bars ── */
+function buildProgress() {
+  const el = document.getElementById('progressBars');
+  el.innerHTML = '';
+  const cats = ['planning','design','development','testing','deployment'];
+  const fills = {planning:'fill-blue',design:'fill-purple',development:'fill-green',testing:'fill-orange',deployment:'fill-red'};
+  cats.forEach(cat => {
+    const ct = tasks.filter(t => t.category === cat);
+    const done = ct.filter(t => t.status === 'completed').length;
+    const pct = ct.length ? Math.round(done / ct.length * 100) : 0;
+    const wrap = document.createElement('div');
+    wrap.style.marginBottom = '10px';
+    wrap.innerHTML =
+      '<div class="progress-label"><span>' + catLabel[cat] + '</span><span id="prog-' + cat + '">' + done + '/' + ct.length + ' tareas (' + pct + '%)</span></div>' +
+      '<div class="progress-bar"><div class="progress-fill ' + fills[cat] + '" id="fill-' + cat + '" style="width:' + pct + '%"></div></div>';
+    el.appendChild(wrap);
+  });
+}
+
+/* ── Refresh stats without full re-render ── */
+function refreshStats() {
+  // Summary cards
+  const d = tasks.filter(t => t.module === 'documentation');
+  const a = tasks.filter(t => t.module === 'ambulance');
+  document.getElementById('docTotal').textContent = d.length;
+  document.getElementById('docDone').textContent  = d.filter(t => t.status === 'completed').length;
+  document.getElementById('ambTotal').textContent = a.length;
+  document.getElementById('ambDone').textContent  = a.filter(t => t.status === 'completed').length;
+
+  // Progress bars
+  const cats = ['planning','design','development','testing','deployment'];
+  cats.forEach(cat => {
+    const ct = tasks.filter(t => t.category === cat);
+    const done = ct.filter(t => t.status === 'completed').length;
+    const pct = ct.length ? Math.round(done / ct.length * 100) : 0;
+    const fillEl = document.getElementById('fill-' + cat);
+    const lblEl  = document.getElementById('prog-' + cat);
+    if (fillEl) fillEl.style.width = pct + '%';
+    if (lblEl)  lblEl.textContent  = done + '/' + ct.length + ' tareas (' + pct + '%)';
+  });
+}
+
+function setFilter(btn, filter) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentFilter = filter;
+  buildRows(filter);
+}
+
+// Init
+buildHeaders();
+buildRows('all');
+buildProgress();
+refreshStats();
+</script>
+</body>
+</html>
